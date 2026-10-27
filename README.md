@@ -68,20 +68,20 @@ Astuces :
 
 ## Combien ça coûte ?
 
-Chaque tour fait un appel à l'API Anthropic. Ordre de grandeur avec le modèle par défaut (`claude-opus-5-5`, 4 $ par million de jetons en entrée et 20 $ en sortie) :
+Chaque tour fait un appel à l'API Anthropic. Ordre de grandeur avec le modèle par défaut (`claude-sonnet-5-5`, 2 $ par million de jetons en entrée et 10 $ en sortie) :
 
-- un tour de jeu : environ **3 à 6 centimes** (le contexte grandit un peu avec l'histoire) ;
-- une illustration de lieu : environ **5 à 8 centimes** ;
-- une soirée de 2 heures (une centaine de tours) : environ **4 à 7 €**.
+- un tour de jeu : environ **1,5 à 3 centimes** (le contexte grandit un peu avec l'histoire) ;
+- une illustration de lieu : environ **2,5 à 4 centimes** ;
+- une soirée de 2 heures (une centaine de tours) : environ **2 à 3,5 €**.
 
-Pour réduire la facture : `NARRATOR_MODEL=claude-sonnet-5-5` (environ deux fois moins cher) et/ou `ILLUSTRATIONS=non` dans `.env`. Pensez aussi à fixer une limite de dépense mensuelle dans la console Anthropic.
+Pour un narrateur encore plus inspiré (mais deux fois plus cher) : `NARRATOR_MODEL=claude-opus-5-5`. Pour réduire la facture : `ILLUSTRATIONS=non` dans `.env`. Pensez aussi à fixer une limite de dépense mensuelle dans la console Anthropic.
 
 ## Configuration (`.env`)
 
 | Variable | Rôle | Défaut |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Clé API Anthropic. Sans clé : mode démo. | — |
-| `NARRATOR_MODEL` | Modèle du narrateur. | `claude-opus-5-5` |
+| `NARRATOR_MODEL` | Modèle du narrateur. | `claude-sonnet-5-5` |
 | `NARRATOR_EFFORT` | Temps de réflexion : `low` (rapide), `medium`, `high`. | `low` |
 | `ILLUSTRATIONS` | Illustrations SVG des lieux : `oui` ou `non`. | `oui` |
 | `ILLUSTRATOR_MODEL` | Modèle de l'illustrateur. | celui du narrateur |

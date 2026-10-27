@@ -10,7 +10,7 @@ export function createNarrator(env = process.env) {
   const hasCredentials = Boolean(env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN);
   if (mode === 'demo' || (mode !== 'claude' && !hasCredentials)) return new DemoNarrator();
 
-  const model = env.NARRATOR_MODEL || 'claude-opus-5-5';
+  const model = env.NARRATOR_MODEL || 'claude-sonnet-5-5';
   return new ClaudeNarrator({
     model,
     effort: EFFORTS.includes(env.NARRATOR_EFFORT) ? env.NARRATOR_EFFORT : 'low',
