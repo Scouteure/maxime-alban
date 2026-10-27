@@ -7,7 +7,8 @@ import { characterSheet, characterSummary, conditions, hpGauge } from './fiche.j
 import { portrait } from './portrait.js';
 import { $, $$, confirmDialog, el, fill, initSettings, openDialog, settings, storage, toast } from './ui.js';
 
-const socket = io();
+// closeOnBeforeunload : prévient le serveur dès que la page se ferme, pour que les autres le voient tout de suite.
+const socket = io({ closeOnBeforeunload: true });
 
 const state = {
   rules: null, // races, classes, apparence… (chargées depuis /api/regles)

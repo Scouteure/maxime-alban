@@ -76,7 +76,9 @@ export function createGameServer({ narrator, dataDir, publicDir }) {
   );
 
   const httpServer = createServer(app);
-  const io = new Server(httpServer, { maxHttpBufferSize: 100_000 });
+  // Vérifie toutes les 10 s que chaque joueur est encore là : un ami parti est repéré en moins de 20 s,
+  // même quand la connexion directe (WebSocket) est bloquée par un réseau et que le jeu passe par des requêtes classiques.
+  const io = new Server(httpServer, { maxHttpBufferSize: 100_000, pingInterval: 10_000, pingTimeout: 10_000 });
 
   const broadcast = (game) => io.to(game.code).emit('etat', game.publicView());
   const changed = (game) => {
