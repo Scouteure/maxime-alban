@@ -1,6 +1,8 @@
 // Narrateur de démonstration : aucune IA, des réponses toutes faites.
 // Pratique pour tester l'interface et le multijoueur sans clé API.
 
+import { SKILLS } from '../rules.js';
+
 const PLACES = [
   { name: 'Taverne du Sanglier Borgne', mood: '🍺🔥🎻🌧️', sky: '#2b1d14', ground: '#5a3a22', accent: '#f0a030' },
   { name: 'Forêt des Murmures', mood: '🌲🌫️🦉🍄', sky: '#16302b', ground: '#22412a', accent: '#8fd18b' },
@@ -34,7 +36,7 @@ export class DemoNarrator {
     const next = request.next.character.name;
 
     let narration;
-    let roll = { utilise: false, caracteristique: 'aucune', difficulte: 0 };
+    let roll = { utilise: false, caracteristique: 'aucune', competence: 'aucune', difficulte: 0 };
     const effets = [];
     if (intro) {
       const names = game
@@ -48,8 +50,16 @@ export class DemoNarrator {
         `Ajoutez une clé ANTHROPIC_API_KEY pour un vrai Maître du Jeu.)\n\n${next}, que fais-tu ?`;
     } else {
       const c = request.actor.character;
-      roll = { utilise: true, caracteristique: pick(['FOR', 'DEX', 'INT', 'SAG', 'CHA']), difficulte: pick([10, 12, 13, 15]) };
-      const success = request.totals[roll.caracteristique] >= roll.difficulte;
+      // Une fois sur deux, un jet de compétence (avec bonus de maîtrise si le personnage la maîtrise).
+      const skill = Math.random() < 0.5 ? pick(Object.keys(SKILLS)) : null;
+      roll = {
+        utilise: true,
+        caracteristique: skill ? SKILLS[skill].stat : pick(['FOR', 'DEX', 'INT', 'SAG', 'CHA']),
+        competence: skill ?? 'aucune',
+        difficulte: pick([10, 12, 13, 15]),
+      };
+      const total = request.skillTotals?.[skill] ?? request.totals[roll.caracteristique];
+      const success = total >= roll.difficulte;
       narration =
         `${c.name} décide : « ${request.text} ». ${success ? 'Avec brio, cela fonctionne !' : 'Hélas, rien ne se passe comme prévu.'} ` +
         `${pick(REACTIONS)}\n\n${next}, à toi : que fais-tu ?`;

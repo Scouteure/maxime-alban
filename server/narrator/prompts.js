@@ -1,6 +1,11 @@
 // Textes envoyés au narrateur : consignes du Maître du Jeu et contexte de chaque tour.
 
-import { STATS, describeCharacterShort, formatModifier, modifier } from '../rules.js';
+import { AGES, ALIGNMENTS, PRONOUNS, describeLook } from '../personnalisation.js';
+import { CLASSES, ORIGINS, RACES, SKILLS, STATS, describeCharacterShort, formatModifier, modifier } from '../rules.js';
+
+const SKILL_LIST = Object.entries(SKILLS)
+  .map(([key, s]) => `${key} (${s.label}, ${s.stat})`)
+  .join(', ');
 
 // Consignes fixes (identiques à chaque tour, donc mises en cache côté API).
 export const SYSTEM_PROMPT = `Tu es le Maître du Jeu (MJ) d'une partie de jeu de rôle dans l'esprit de Donjons & Dragons, jouée en ligne et au tour par tour par un petit groupe d'amis. Tu racontes l'histoire, tu incarnes tous les personnages non-joueurs (PNJ) et tu arbitres les règles. Ton but : que les joueurs passent une soirée mémorable.
@@ -10,6 +15,7 @@ export const SYSTEM_PROMPT = `Tu es le Maître du Jeu (MJ) d'une partie de jeu d
 ## Raconter
 - Écris en français, au présent, de façon vivante et imagée mais concise : 2 à 4 paragraphes courts (environ 120 à 250 mots), séparés par une ligne vide. Pas de titres ni de listes dans la narration ; tu peux mettre un mot important en **gras**.
 - Résous l'action du joueur avec des conséquences crédibles, puis fais réagir le monde : PNJ, environnement, menaces. Donne du caractère aux PNJ (dialogues entre guillemets « »).
+- Respecte l'identité de chaque personnage : pronoms (il, elle, ou iel : dans ce cas, des tournures neutres), apparence, personnalité, historique. Fais-les vivre dans tes descriptions et dans les réactions des PNJ.
 - Ne décide jamais à la place des personnages joueurs : ne leur fais ni dire ni faire plus que ce que le joueur a annoncé. Une action annoncée comme réussie (« je tue le dragon d'un coup ») n'est qu'une tentative.
 - Un personnage ne peut utiliser que les objets de son inventaire et les capacités de sa classe. S'il tente d'utiliser un objet qu'il n'a pas, il ne le trouve pas.
 - Le monde ne tourne pas autour du seul joueur actif : laisse des ouvertures aux autres personnages.
@@ -20,7 +26,8 @@ export const SYSTEM_PROMPT = `Tu es le Maître du Jeu (MJ) d'une partie de jeu d
 ## Jets de dés
 - Un d20 a déjà été lancé pour l'action : tu reçois le résultat brut et le total obtenu pour chaque caractéristique (d20 + modificateur).
 - Si l'issue est incertaine et que l'échec serait intéressant, utilise ce jet : choisis la caractéristique la plus pertinente et une difficulté (DD) : 5 très facile, 10 facile, 13 moyen, 15 difficile, 18 très difficile, 20 et plus presque impossible. C'est une réussite si le total est supérieur ou égal au DD. Un 20 naturel est une réussite critique, un 1 naturel un échec critique (conséquences dramatiques ou comiques).
-- Si l'action est triviale ou sans risque (parler, observer, commander une bière), n'utilise pas le jet : jet.utilise = false, caracteristique = "aucune", difficulte = 0.
+- Choisis aussi la compétence qui correspond le mieux (competence), ou "aucune" si aucune ne convient. Compétences possibles : ${SKILL_LIST}. Si le personnage maîtrise cette compétence, son total est plus élevé (bonus de maîtrise) : utilise alors le total indiqué pour cette compétence. La caractéristique doit être celle de la compétence.
+- Si l'action est triviale ou sans risque (parler, observer, commander une bière), n'utilise pas le jet : jet.utilise = false, caracteristique = "aucune", competence = "aucune", difficulte = 0.
 - Pour une introduction, n'utilise jamais le jet.
 - Raconte un résultat cohérent avec le jet, sans citer les chiffres dans la narration : l'interface les affiche déjà.
 
@@ -47,13 +54,29 @@ function characterSheet(player) {
   const c = player.character;
   const stats = STATS.map((s) => `${s} ${c.stats[s]} (${formatModifier(modifier(c.stats[s]))})`).join(', ');
   const items = c.inventory.map((i) => (i.quantity > 1 ? `${i.name} x${i.quantity}` : i.name)).join(', ') || 'rien';
+  const identity = [
+    c.pronouns ? `pronom : ${PRONOUNS[c.pronouns].label.toLowerCase()}` : null,
+    AGES[c.age]?.label.toLowerCase(),
+    ALIGNMENTS[c.alignment]?.label.toLowerCase(),
+    ORIGINS[c.origin] ? `historique : ${ORIGINS[c.origin].label.toLowerCase()}` : null,
+  ].filter(Boolean);
   const lines = [
     `### ${c.name} — joué par ${player.name}`,
     `${describeCharacterShort(c)} · PV ${c.hp}/${c.maxHp} · XP ${c.xp} · Or ${c.gold}`,
+    `Identité : ${identity.join(', ')}`,
+    `Apparence : ${describeLook(c.look)}`,
     `Caractéristiques : ${stats}`,
-    `Capacités : ${c.abilities.join(', ')}`,
-    `Inventaire : ${items}`,
+    `Compétences maîtrisées : ${c.skills.map((k) => SKILLS[k].label).join(', ') || 'aucune'}`,
+    `Capacités de ${CLASSES[c.classKey].label.toLowerCase()} : ${c.abilities.join(', ')}`,
+    `Traits de ${RACES[c.race].label.toLowerCase()} : ${c.racialTraits.join(', ')}`,
   ];
+  if (c.feature) lines.push(`Avantage d’historique : ${c.feature}`);
+  lines.push(`Inventaire : ${items}`);
+  const p = c.personality;
+  if (p.traits.length) lines.push(`Personnalité : ${p.traits.join(', ')}`);
+  if (p.ideal) lines.push(`Idéal : ${p.ideal}`);
+  if (p.bond) lines.push(`Lien : ${p.bond}`);
+  if (p.flaw) lines.push(`Défaut : ${p.flaw}`);
   if (c.conditions.length) lines.push(`États : ${c.conditions.join(', ')}`);
   if (c.background) lines.push(`Histoire : ${c.background}`);
   return lines.join('\n');
@@ -67,7 +90,7 @@ function historyLine(entry, game) {
     case 'action':
       return `[${who}] ${entry.text}`;
     case 'roll':
-      return `[Jet] ${who} : ${entry.stat} ${entry.total} contre DD ${entry.dc} → ${entry.success ? 'réussite' : 'échec'}${entry.d20 === 20 || entry.d20 === 1 ? ` (${entry.d20} naturel)` : ''}`;
+      return `[Jet] ${who} : ${entry.skill ? `${SKILLS[entry.skill]?.label ?? entry.skill} (${entry.stat})` : entry.stat} ${entry.total} contre DD ${entry.dc} → ${entry.success ? 'réussite' : 'échec'}${entry.d20 === 20 || entry.d20 === 1 ? ` (${entry.d20} naturel)` : ''}`;
     case 'effects':
       return `[Effets] ${entry.lines.map((l) => `${l.character} : ${l.parts.join(', ')}`).join(' ; ')}`;
     case 'system':
@@ -106,6 +129,9 @@ export function buildTurnPrompt(game, request) {
   } else {
     const c = request.actor.character;
     const totals = STATS.map((s) => `${s} ${request.totals[s]}`).join(', ');
+    const skillTotals = Object.entries(request.skillTotals ?? {})
+      .map(([k, t]) => `${k} ${t}`)
+      .join(', ');
     const nextLine =
       request.next.id === request.actor.id
         ? `${c.name} rejoue ensuite (il est le seul joueur disponible).`
@@ -113,7 +139,9 @@ export function buildTurnPrompt(game, request) {
     parts.push(
       `## Action à résoudre\n${c.name} (joué par ${request.actor.name}) : « ${request.text} »\n\n` +
         `d20 lancé : ${request.d20}${request.d20 === 20 ? ' (20 naturel !)' : request.d20 === 1 ? ' (1 naturel...)' : ''}. ` +
-        `Totaux par caractéristique : ${totals}.\n\n${nextLine}`,
+        `Totaux par caractéristique : ${totals}.\n` +
+        (skillTotals ? `Totaux pour ses compétences maîtrisées (bonus de maîtrise +${request.proficiency} inclus) : ${skillTotals}.\n` : '') +
+        `\n${nextLine}`,
     );
   }
   return parts.join('\n\n');

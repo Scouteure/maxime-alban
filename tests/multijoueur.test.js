@@ -65,7 +65,13 @@ test('deux amis jouent chacun leur tour', async () => {
   const joined = await call(alban, 'partie:rejoindre', { code: created.code, name: 'Alban' });
   assert.ok(joined.ok);
 
-  assert.ok((await call(maxime, 'personnage:creer', { name: 'Aria', race: 'elfe', classKey: 'mage' })).ok);
+  // Maxime lance les dés et place les valeurs obtenues comme il veut.
+  const roll = await call(maxime, 'personnage:des');
+  assert.equal(roll.pool.length, 6);
+  const placed = { FOR: roll.pool[5], DEX: roll.pool[1], CON: roll.pool[2], INT: roll.pool[0], SAG: roll.pool[3], CHA: roll.pool[4] };
+  assert.ok((await call(maxime, 'personnage:creer', { name: 'Aria', race: 'elfe', classKey: 'mage', statMethod: 'des', baseStats: placed })).ok);
+  let lobby = await waitForState(maxime, (s) => s.players.some((p) => p.character?.name === 'Aria'));
+  assert.equal(lobby.players[0].character.baseStats.INT, roll.pool[0], 'tirage accepté');
   assert.ok((await call(alban, 'personnage:creer', { name: 'Borin', race: 'nain', classKey: 'guerrier' })).ok);
 
   assert.ok((await call(maxime, 'partie:commencer')).ok);
@@ -97,6 +103,14 @@ test('deux amis jouent chacun leur tour', async () => {
   // Une illustration est produite pour la scène.
   state = await waitForState(maxime, (s) => Boolean(s.scene.image));
   assert.match(state.scene.image, /^<svg/);
+
+  // L'apparence peut changer en pleine aventure, mais pas le nom ni la classe.
+  assert.ok((await call(alban, 'personnage:style', { name: 'Autre', classKey: 'mage', look: { headwear: 'casque' }, pronouns: 'il' })).ok);
+  state = await waitForState(maxime, (s) => s.players.some((p) => p.character?.look.headwear === 'casque'));
+  const borin = state.players.find((p) => p.id === joined.playerId).character;
+  assert.equal(borin.name, 'Borin');
+  assert.equal(borin.classKey, 'guerrier');
+  assert.equal(borin.pronouns, 'il');
 
   // Si Maxime se déconnecte, Alban peut passer son tour.
   maxime.close();

@@ -2,7 +2,7 @@
 // Aucune dépendance réseau ici, ce qui rend la logique facile à tester.
 
 import { randomBytes, randomUUID } from 'node:crypto';
-import { createCharacter, hpGainOnLevelUp, levelForXp } from './rules.js';
+import { createCharacter, hpGainOnLevelUp, levelForXp, restyleCharacter, upgradeCharacter } from './rules.js';
 
 const MAX_LOG = 400;
 const MAX_JOURNAL = 60;
@@ -36,7 +36,10 @@ export class Game {
     // Champs non sauvegardés
     this.narrating = false;
     this.illustrating = false;
-    for (const p of this.players) p.connections = 0;
+    for (const p of this.players) {
+      p.connections = 0;
+      upgradeCharacter(p.character); // fiches créées avec une ancienne version du jeu
+    }
   }
 
   static create(code) {
@@ -92,7 +95,7 @@ export class Game {
     const player = this.playerById(playerId);
     if (!player) throw new Error('Joueur inconnu.');
     const isNew = !player.character;
-    player.character = createCharacter(choices);
+    player.character = createCharacter({ ...choices, rolledPool: player.rolledPool });
     if (isNew && this.status === 'playing') {
       this.addLog({
         type: 'system',
@@ -101,6 +104,13 @@ export class Game {
       if (!this.currentPlayer()) this.turn.playerId = player.id;
     }
     return player.character;
+  }
+
+  // Apparence, personnalité et histoire : modifiables à tout moment, même en pleine aventure.
+  restyleCharacter(playerId, choices) {
+    const player = this.playerById(playerId);
+    if (!player?.character) throw new Error('Créez d’abord votre personnage.');
+    return restyleCharacter(player.character, choices);
   }
 
   // Joueurs ayant un personnage, dans l'ordre de jeu.

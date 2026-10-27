@@ -1,85 +1,68 @@
 /* global io */
-// Interface du jeu : un seul fichier, sans framework, pour rester facile à modifier.
+// Interface du jeu, sans framework, pour rester facile à modifier.
+// Les autres modules : ui.js (outils), creation.js (création du personnage), fiche.js (fiche), portrait.js (portrait).
+
+import { closeCreator, openCreator } from './creation.js';
+import { characterSheet, characterSummary, conditions, hpGauge } from './fiche.js';
+import { portrait } from './portrait.js';
+import { $, $$, confirmDialog, el, fill, initSettings, openDialog, settings, storage, toast } from './ui.js';
 
 const socket = io();
-const $ = (selector) => document.querySelector(selector);
 
 const state = {
-  rules: null, // races, classes, caractéristiques (chargées depuis /api/regles)
+  rules: null, // races, classes, apparence… (chargées depuis /api/regles)
   info: null, // nom du narrateur et adresses réseau local (/api/info)
   code: null,
   token: null,
   playerId: null,
   game: null, // dernier état reçu du serveur
-  editing: false, // modification du personnage depuis le salon
-  draft: null, // personnage en cours de création
+  editing: false, // false, 'creation' (depuis le salon) ou 'style' (pendant l'aventure)
+  creatorKey: null, // évite de réinitialiser l'assistant à chaque mise à jour du serveur
   partial: '', // narration en train d'arriver
   tab: 'fiche',
+  view: 'recit', // vue affichée sur téléphone : 'recit' ou un onglet
   renderedLog: new Map(),
+  panelCache: {}, // évite de redessiner un onglet qui n'a pas changé
   chatCount: -1, // -1 : messages pas encore affichés
   unreadChat: 0,
   wasMyTurn: false,
   image: null,
   settingsDirty: false,
-  openMembers: new Set(),
 };
+
+// ---------- Préréglages du salon ----------
+
+const PRESETS = {
+  univers: [
+    ['🏰 Médiéval-fantastique', 'Médiéval-fantastique classique : royaumes, forêts anciennes, donjons, magie et créatures légendaires.'],
+    ['🏴‍☠️ Pirates', 'L’archipel des Mers d’Émeraude : pirates, îles mystérieuses, trésors maudits, monstres marins et marine royale.'],
+    ['🦇 Horreur gothique', 'Une contrée brumeuse sous la coupe d’un seigneur vampire : villages apeurés, loups-garous, cimetières et secrets de famille.'],
+    ['🍄 Royaume féerique', 'Le Pays des Fées : forêts enchantées, cours féeriques capricieuses, animaux qui parlent et pactes à double tranchant.'],
+    ['🏜️ Désert des djinns', 'Un empire du désert : cités-oasis, caravanes, djinns liés à des lampes, tombeaux oubliés sous les dunes.'],
+    ['❄️ Terres nordiques', 'Les terres gelées du Nord : clans rivaux, drakkars, géants des glaces, runes anciennes et hivers sans fin.'],
+    ['⚙️ Steampunk', 'Une métropole de vapeur et de cuivre : inventeurs, dirigeables, automates, guildes secrètes et magie industrielle.'],
+    ['🏙️ Cité d’intrigues', 'Une grande cité portuaire : guildes de voleurs, nobles corrompus, sociétés secrètes et enquêtes dans les ruelles.'],
+  ],
+  ton: [
+    ['😄 Épique et drôle', 'Épique avec une bonne pointe d’humour.'],
+    ['🦸 Héroïque', 'Grand souffle héroïque : nobles quêtes, méchants mémorables, moments de bravoure.'],
+    ['🌑 Sombre', 'Sombre et tendu : danger réel, choix difficiles, peu d’humour.'],
+    ['🔎 Mystère', 'Mystère et enquête : indices, suspects, fausses pistes et révélations.'],
+    ['🧸 Pour tous', 'Léger et bienveillant, adapté aux enfants : peu de violence, beaucoup d’aventure et d’humour.'],
+    ['🤪 Loufoque', 'Absurde et loufoque : situations improbables, PNJ excentriques, humour à chaque tour.'],
+  ],
+  depart: [
+    ['🍺 Taverne et orage', 'Les personnages arrivent, un soir d’orage, dans une taverne animée.'],
+    ['⛓️ En prison', 'Les personnages se réveillent dans la même cellule, sans savoir comment ils sont arrivés là.'],
+    ['🚢 Naufrage', 'Le navire des personnages vient de sombrer ; ils échouent sur une île inconnue.'],
+    ['🐪 Embuscade', 'La caravane qui transporte les personnages est attaquée en pleine route.'],
+    ['💍 Mariage royal', 'Les personnages sont invités (ou incrustés) au mariage du prince, quand un cri retentit.'],
+    ['🗺️ Carte au trésor', 'Un vieillard mourant confie aux personnages une carte au trésor déchirée en plusieurs morceaux.'],
+  ],
+};
+const PRESET_FIELDS = { univers: '#param-univers', ton: '#param-ton', depart: '#param-depart' };
 
 // ---------- Utilitaires ----------
-
-const storage = {
-  get(key) {
-    try {
-      return localStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  },
-  set(key, value) {
-    try {
-      localStorage.setItem(key, value);
-    } catch {
-      // stockage indisponible (navigation privée) : tant pis
-    }
-  },
-  remove(key) {
-    try {
-      localStorage.removeItem(key);
-    } catch {
-      // idem
-    }
-  },
-};
-
-// Crée un élément HTML : el('div', { className: 'x', text: 'y' }, enfant1, enfant2...)
-function el(tag, props = {}, ...children) {
-  const node = document.createElement(tag);
-  for (const [key, value] of Object.entries(props)) {
-    if (value === undefined || value === null || value === false) continue;
-    if (key === 'text') node.textContent = value;
-    else if (key === 'className') node.className = value;
-    else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
-    else node.setAttribute(key, value === true ? '' : value);
-  }
-  for (const child of children.flat()) {
-    if (child === null || child === undefined || child === false) continue;
-    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
-  }
-  return node;
-}
-
-// Remplace le contenu d'un élément en ignorant les enfants vides (null, false...).
-function fill(node, ...children) {
-  node.replaceChildren(...children.flat().filter((c) => c !== null && c !== undefined && c !== false));
-}
-
-let toastTimer;
-function toast(message, type = 'erreur') {
-  const box = $('#toast');
-  box.textContent = message;
-  box.className = `visible ${type}`;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (box.className = ''), 5000);
-}
 
 function emit(event, payload = {}) {
   return new Promise((resolve) => {
@@ -88,11 +71,6 @@ function emit(event, payload = {}) {
     });
   });
 }
-
-const modifier = (score) => Math.floor((score - 10) / 2);
-const formatMod = (mod) => (mod >= 0 ? `+${mod}` : `${mod}`);
-// Même formule que server/rules.js
-const xpForLevel = (level) => 50 * level * (level - 1);
 
 function myPlayer() {
   return state.game?.players.find((p) => p.id === state.playerId);
@@ -123,9 +101,19 @@ async function copyInvite() {
   }
 }
 
+function smallPortrait(c, size = 40) {
+  return el('span', { className: 'portrait mini', style: `--taille:${size}px` }, portrait(c, state.rules, { label: '' }));
+}
+
+function showSheet(player) {
+  fill($('#dlg-fiche-contenu'), characterSheet(player.character, state.rules, { player }));
+  openDialog($('#dlg-fiche'));
+}
+
 // Petit carillon quand c'est à vous de jouer.
 let audioContext;
 function chime() {
+  if (!settings.sound) return;
   try {
     audioContext ??= new AudioContext();
     const t = audioContext.currentTime;
@@ -190,11 +178,13 @@ function leave() {
     playerId: null,
     game: null,
     editing: false,
-    draft: null,
+    creatorKey: null,
     image: null,
     chatCount: -1,
     unreadChat: 0,
+    panelCache: {},
   });
+  closeCreator();
   state.renderedLog.clear();
   $('#recit').replaceChildren();
   history.replaceState(null, '', location.pathname);
@@ -224,9 +214,9 @@ socket.on('action:rendue', ({ text }) => {
 // ---------- Rendu général ----------
 
 function showScreen(name) {
-  for (const screen of document.querySelectorAll('.ecran')) {
-    screen.classList.toggle('cache', screen.id !== `ecran-${name}`);
-  }
+  for (const screen of $$('.ecran')) screen.classList.toggle('cache', screen.id !== `ecran-${name}`);
+  $('#outils-globaux').classList.toggle('cache', name === 'jeu');
+  document.body.dataset.ecran = name;
 }
 
 function render() {
@@ -239,12 +229,23 @@ function render() {
     else if (g.status === 'lobby') screen = 'salon';
     else screen = 'jeu';
   }
+  const previous = document.body.dataset.ecran;
   showScreen(screen);
   if (screen === 'accueil') renderHome();
-  if (screen === 'personnage') renderCharacterCreation(me);
-  else state.draft = null;
+  if (screen === 'personnage') ensureCreator(me);
+  else if (state.creatorKey) {
+    state.creatorKey = null;
+    closeCreator();
+  }
   if (screen === 'salon') renderLobby();
   if (screen === 'jeu') renderGame();
+  // En changeant d'écran, on place le focus sur son titre (utile avec un lecteur d'écran).
+  if (previous && previous !== screen) {
+    const title = $(`#ecran-${screen} h1`) ?? $(`#ecran-${screen} .logo`);
+    title?.setAttribute('tabindex', '-1');
+    title?.focus({ preventScroll: true });
+    window.scrollTo({ top: 0 });
+  }
 }
 
 // ---------- Accueil ----------
@@ -269,168 +270,97 @@ $('#btn-creer').addEventListener('click', async () => {
   onJoined(res);
 });
 
-$('#btn-rejoindre').addEventListener('click', () => {
+$('#form-rejoindre').addEventListener('submit', (e) => {
+  e.preventDefault();
   const name = $('#nom-joueur').value.trim();
   if (name) storage.set('taverne:nom', name);
   join($('#code-partie').value, name);
-});
-$('#code-partie').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') $('#btn-rejoindre').click();
 });
 $('#btn-reprendre').addEventListener('click', () => join(storage.get('taverne:derniere')));
 
 // ---------- Création du personnage ----------
 
-function assignStats(pool, classKey) {
-  const priorities = state.rules.classes[classKey].priorities;
-  const sorted = [...pool].sort((a, b) => b - a);
-  return Object.fromEntries(priorities.map((stat, i) => [stat, sorted[i]]));
-}
-
-function startDraft(existing) {
-  const rules = state.rules;
-  if (existing) {
-    const base = rules.stats.map((s) => existing.stats[s] - (rules.races[existing.race].bonus[s] ?? 0));
-    state.draft = { race: existing.race, classKey: existing.classKey, pool: base };
-    $('#perso-nom').value = existing.name;
-    $('#perso-histoire').value = existing.background;
-  } else {
-    state.draft = { race: 'humain', classKey: 'guerrier', pool: [...rules.standardArray] };
-    $('#perso-nom').value = '';
-    $('#perso-histoire').value = '';
-  }
-}
-
-function renderCharacterCreation(me) {
-  if (!state.rules) return;
-  if (!state.draft) startDraft(me.character);
-  const { rules, draft } = state;
-  $('#btn-annuler-perso').classList.toggle('cache', !me.character);
-
-  $('#choix-race').replaceChildren(
-    ...Object.entries(rules.races).map(([key, race]) =>
-      el(
-        'button',
-        {
-          className: draft.race === key ? 'choisi' : '',
-          onclick: () => {
-            draft.race = key;
-            renderCharacterCreation(me);
-          },
-        },
-        el('span', { className: 'emoji', text: race.emoji }),
-        race.label,
-        el('span', {
-          className: 'bonus',
-          text: Object.entries(race.bonus)
-            .map(([s, b]) => `${s} +${b}`)
-            .join(' '),
-        }),
-      ),
-    ),
-  );
-
-  $('#choix-classe').replaceChildren(
-    ...Object.entries(rules.classes).map(([key, cls]) =>
-      el(
-        'button',
-        {
-          className: draft.classKey === key ? 'choisi' : '',
-          onclick: () => {
-            draft.classKey = key;
-            renderCharacterCreation(me);
-          },
-        },
-        el('span', { className: 'emoji', text: cls.emoji }),
-        cls.label,
-        el('span', { className: 'bonus', text: `PV : d${cls.hitDie}` }),
-      ),
-    ),
-  );
-
-  const cls = rules.classes[draft.classKey];
-  $('#classe-details').replaceChildren(
-    el('div', {}, el('strong', { text: 'Capacités : ' }), cls.abilities.join(', ')),
-    el(
-      'div',
-      {},
-      el('strong', { text: 'Équipement : ' }),
-      cls.items.map((i) => (i.quantity > 1 ? `${i.name} ×${i.quantity}` : i.name)).join(', '),
-      ` · ${cls.gold} pièces d'or`,
-    ),
-  );
-
-  const base = assignStats(draft.pool, draft.classKey);
-  $('#caracs').replaceChildren(
-    ...rules.stats.map((s) => {
-      const value = Math.min(20, base[s] + (rules.races[draft.race].bonus[s] ?? 0));
-      return el(
-        'div',
-        { className: 'carac', title: rules.statLabels[s] },
-        el('div', { className: 'nom', text: s }),
-        el('div', { className: 'valeur', text: value }),
-        el('div', { className: 'mod', text: formatMod(modifier(value)) }),
-      );
-    }),
-  );
-}
-
-$('#btn-des').addEventListener('click', async () => {
-  const res = await emit('personnage:caracs', { classKey: state.draft.classKey, mode: 'des' });
-  if (!res.ok) return toast(res.error);
-  state.draft.pool = Object.values(res.stats);
-  renderCharacterCreation(myPlayer());
-});
-$('#btn-standard').addEventListener('click', () => {
-  state.draft.pool = [...state.rules.standardArray];
-  renderCharacterCreation(myPlayer());
-});
-$('#btn-annuler-perso').addEventListener('click', () => {
-  state.editing = false;
-  render();
-});
-$('#btn-valider-perso').addEventListener('click', async () => {
-  const name = $('#perso-nom').value.trim();
-  if (!name) {
-    toast('Donne un nom à ton personnage.', 'info');
-    return $('#perso-nom').focus();
-  }
-  const { race, classKey, pool } = state.draft;
-  const res = await emit('personnage:creer', {
-    name,
-    race,
-    classKey,
-    background: $('#perso-histoire').value,
-    baseStats: assignStats(pool, classKey),
+function ensureCreator(me) {
+  const mode = state.editing === 'style' ? 'style' : 'creation';
+  const key = `${state.code}:${mode}:${me.character ? 'modif' : 'nouveau'}`;
+  if (state.creatorKey === key) return;
+  state.creatorKey = key;
+  const done = () => {
+    state.editing = false;
+    render();
+  };
+  openCreator({
+    rules: state.rules,
+    existing: me.character,
+    mode,
+    storageKey: `taverne:brouillon:${state.code}`,
+    roll: () => emit('personnage:des'),
+    onCancel: me.character ? done : null,
+    onSubmit: async (choices) => {
+      const res = await emit(mode === 'style' ? 'personnage:style' : 'personnage:creer', choices);
+      if (!res.ok) {
+        toast(res.error);
+        return false;
+      }
+      toast(mode === 'style' ? 'Apparence et personnalité mises à jour.' : `${choices.name} est prêt pour l’aventure !`, 'info');
+      done();
+      return true;
+    },
   });
-  if (!res.ok) return toast(res.error);
-  state.editing = false;
-  state.draft = null;
-  render();
-});
+}
 
 // ---------- Salon ----------
 
-function characterSummary(c) {
-  const race = state.rules?.races[c.race]?.label ?? c.race;
-  const cls = state.rules?.classes[c.classKey]?.label ?? c.classKey;
-  return `${race} ${cls}`;
+function renderPresets() {
+  for (const [kind, presets] of Object.entries(PRESETS)) {
+    const field = $(PRESET_FIELDS[kind]);
+    fill(
+      $(`#presets-${kind}`),
+      presets.map(([label, text]) =>
+        el('button', {
+          type: 'button',
+          className: `puce-choix ${field.value.trim() === text ? 'choisi' : ''}`,
+          'aria-pressed': String(field.value.trim() === text),
+          title: text,
+          text: label,
+          onclick: () => {
+            field.value = text;
+            saveSettings();
+          },
+        }),
+      ),
+    );
+  }
 }
 
 function renderLobby() {
   const g = state.game;
+  const rules = state.rules;
   $('#salon-code').textContent = g.code;
-  $('#salon-joueurs').replaceChildren(
-    ...g.players.map((p) =>
+  fill(
+    $('#salon-joueurs'),
+    g.players.map((p) =>
       el(
         'li',
-        {},
-        el('span', { className: `point ${p.connected ? 'en-ligne' : ''}`, title: p.connected ? 'Connecté' : 'Déconnecté' }),
-        el('strong', { text: p.name }),
-        p.id === state.playerId ? el('span', { className: 'petit', text: '(toi)' }) : null,
+        { className: 'joueur' },
+        p.character ? smallPortrait(p.character, 52) : el('span', { className: 'portrait mini vide', style: '--taille:52px', 'aria-hidden': 'true', text: '?' }),
+        el(
+          'div',
+          { className: 'joueur-texte' },
+          el(
+            'div',
+            {},
+            el('span', { className: `point ${p.connected ? 'en-ligne' : ''}`, role: 'img', 'aria-label': p.connected ? 'connecté' : 'déconnecté' }),
+            el('strong', { text: p.name }),
+            p.id === state.playerId ? el('span', { className: 'petit', text: ' (toi)' }) : null,
+          ),
+          p.character
+            ? el('div', { className: 'petit', text: `${p.character.name} · ${characterSummary(p.character, rules)}` })
+            : el('div', { className: 'petit', text: '✏️ crée son personnage…' }),
+        ),
         p.character
-          ? `— ${p.character.emoji} ${p.character.name}, ${characterSummary(p.character)}`
-          : el('em', { className: 'petit', text: '— crée son personnage…' }),
+          ? el('button', { type: 'button', className: 'petit-bouton', text: 'Voir la fiche', 'aria-label': `Voir la fiche de ${p.character.name}`, onclick: () => showSheet(p) })
+          : null,
       ),
     ),
   );
@@ -442,9 +372,7 @@ function renderLobby() {
     fill(
       tip,
       '💡 Ce lien commence par « localhost » : il ne marche que sur cet ordinateur. ',
-      lan.length
-        ? ['Si ton ami est sur le même Wi-Fi, envoie-lui plutôt : ', el('code', { text: inviteLink(lan[0]) }), '. ']
-        : null,
+      lan.length ? ['Si ton ami est sur le même Wi-Fi, envoie-lui plutôt : ', el('code', { text: inviteLink(lan[0]) }), '. '] : null,
       'Pour jouer à distance, utilise un tunnel (voir le README, section « Jouer à deux »).',
     );
   }
@@ -454,14 +382,24 @@ function renderLobby() {
     $('#param-ton').value = g.settings.tone;
     $('#param-depart').value = g.settings.start;
   }
-  const ready = g.players.some((p) => p.character);
+  renderPresets();
+
+  const ready = g.players.filter((p) => p.character).length;
+  $('#salon-pret').textContent =
+    ready === g.players.length
+      ? `Tout le monde est prêt (${ready}).`
+      : `${ready} aventurier${ready > 1 ? 's' : ''} prêt${ready > 1 ? 's' : ''} sur ${g.players.length}. Les retardataires pourront rejoindre en cours de route.`;
   const start = $('#btn-commencer');
   start.disabled = !ready || g.narrating;
   start.textContent = g.narrating ? '📜 Le narrateur prépare l’histoire…' : '⚔️ Commencer l’aventure';
 }
 
-for (const id of ['#param-univers', '#param-ton', '#param-depart']) {
-  $(id).addEventListener('input', () => (state.settingsDirty = true));
+for (const id of Object.values(PRESET_FIELDS)) {
+  $(id).addEventListener('input', () => {
+    state.settingsDirty = true;
+    $('#params-statut').textContent = '';
+  });
+  $(id).addEventListener('change', () => saveSettings());
 }
 
 async function saveSettings() {
@@ -470,18 +408,20 @@ async function saveSettings() {
     tone: $('#param-ton').value,
     start: $('#param-depart').value,
   });
-  if (!res.ok) return toast(res.error);
+  if (!res.ok) {
+    toast(res.error);
+    return false;
+  }
   state.settingsDirty = false;
+  $('#params-statut').textContent = '✓ Réglages enregistrés pour tout le groupe.';
+  renderPresets();
   return true;
 }
 
-$('#btn-enregistrer-params').addEventListener('click', async () => {
-  if (await saveSettings()) toast('Réglages enregistrés.', 'info');
-});
 $('#btn-copier-lien').addEventListener('click', copyInvite);
 $('#btn-inviter').addEventListener('click', copyInvite);
 $('#btn-modifier-perso').addEventListener('click', () => {
-  state.editing = true;
+  state.editing = 'creation';
   render();
 });
 $('#btn-commencer').addEventListener('click', async () => {
@@ -489,9 +429,9 @@ $('#btn-commencer').addEventListener('click', async () => {
   const res = await emit('partie:commencer');
   if (!res.ok) toast(res.error);
 });
-for (const button of document.querySelectorAll('.btn-quitter')) {
-  button.addEventListener('click', () => {
-    if (confirm('Quitter la partie ? Tu pourras la reprendre plus tard avec son code.')) leave();
+for (const button of $$('.btn-quitter')) {
+  button.addEventListener('click', async () => {
+    if (await confirmDialog('Quitter la partie ? Tu pourras la reprendre plus tard avec son code.', { ok: 'Quitter' })) leave();
   });
 }
 
@@ -519,6 +459,7 @@ function formatNarration(text) {
 function renderEntry(entry) {
   const who = entry.playerId ? playerById(entry.playerId) : null;
   const name = who?.character?.name ?? who?.name ?? '?';
+  const rules = state.rules;
   switch (entry.type) {
     case 'narration':
       return el('div', { className: 'entree narration' }, formatNarration(entry.text));
@@ -526,19 +467,21 @@ function renderEntry(entry) {
       return el(
         'div',
         { className: 'entree action' },
-        el('span', { className: 'qui', text: `${who?.character?.emoji ?? '🙂'} ${name}` }),
-        ' : ',
-        el('span', { className: 'texte', text: `« ${entry.text} »` }),
+        who?.character ? smallPortrait(who.character, 36) : null,
+        el('div', {}, el('span', { className: 'qui', text: name }), el('span', { className: 'texte', text: `« ${entry.text} »` })),
       );
     case 'roll': {
       const mod = entry.total - entry.d20;
       const critical = entry.d20 === 20 || entry.d20 === 1;
       const label =
         entry.d20 === 20 ? 'Réussite critique !' : entry.d20 === 1 ? 'Échec critique !' : entry.success ? 'Réussite' : 'Échec';
+      const what = entry.skill
+        ? `${rules.skills[entry.skill]?.label ?? entry.skill} (${entry.stat})${entry.proficient ? ' ★' : ''}`
+        : (rules.statLabels[entry.stat] ?? entry.stat);
       return el(
         'div',
         { className: 'entree jet' },
-        `🎲 ${name} — ${state.rules?.statLabels[entry.stat] ?? entry.stat} : `,
+        `🎲 ${name} — ${what} : `,
         el('span', { className: `de ${critical ? 'critique' : ''}`, text: entry.d20 }),
         ` ${mod >= 0 ? '+' : '−'} ${Math.abs(mod)} = ${entry.total} contre DD ${entry.dc} → `,
         el('span', { className: `resultat ${entry.success ? 'reussite' : 'echec'}`, text: label }),
@@ -548,9 +491,7 @@ function renderEntry(entry) {
       return el(
         'div',
         { className: 'entree effets' },
-        entry.lines.map((line) =>
-          el('span', { className: 'ligne-effet', text: `${line.character} : ${line.parts.join(' · ')}` }),
-        ),
+        entry.lines.map((line) => el('span', { className: 'ligne-effet', text: `${line.character} : ${line.parts.join(' · ')}` })),
       );
     case 'system':
       return el('div', { className: 'entree systeme', text: entry.text });
@@ -562,7 +503,7 @@ function renderEntry(entry) {
 function liveElement() {
   let live = $('#narration-live');
   if (!live) {
-    live = el('div', { id: 'narration-live', className: 'entree' });
+    live = el('div', { id: 'narration-live', className: 'entree', 'aria-live': 'off' });
     $('#recit').append(live);
   }
   return live;
@@ -621,12 +562,14 @@ function renderScene() {
     state.image = scene.image;
     // Affichée via <img> : un SVG chargé ainsi ne peut exécuter aucun script.
     $('#scene-image').src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(scene.image)}`;
+    $('#scene-image').alt = `Illustration : ${scene.place}`;
   }
   $('#scene-lieu').textContent = scene.place || '…';
   $('#scene-ambiance').textContent = scene.mood || '';
   $('#scene-chargement').classList.toggle('cache', !state.game.illustrating);
-  $('#scene-ennemis').replaceChildren(
-    ...scene.enemies.map((e) => el('span', { className: 'ennemi', text: `⚔️ ${e.nom} · ${e.etat}` })),
+  fill(
+    $('#scene-ennemis'),
+    scene.enemies.map((e) => el('span', { className: 'ennemi', text: `⚔️ ${e.nom} · ${e.etat}` })),
   );
 }
 
@@ -650,9 +593,11 @@ function renderTurn() {
   pass.disabled = !(mine || canSkipOther);
   pass.textContent = canSkipOther ? `Passer le tour de ${current.name}` : 'Passer';
 
-  $('#suggestions').replaceChildren(
-    ...(mine ? g.suggestions : []).map((s) =>
+  fill(
+    $('#suggestions'),
+    (mine ? g.suggestions : []).map((s) =>
       el('button', {
+        type: 'button',
         text: s,
         onclick: () => {
           input.value = s;
@@ -665,185 +610,132 @@ function renderTurn() {
   if (mine && !state.wasMyTurn) {
     chime();
     if (document.hidden) document.title = '🎲 À toi de jouer !';
-    input.focus();
+    if (!document.querySelector('dialog[open]') && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) input.focus();
   }
   state.wasMyTurn = mine;
 }
 
-function gauge(kind, label, value, max, low = false) {
-  const percent = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
-  return el(
-    'div',
-    { className: `jauge ${kind} ${low ? 'bas' : ''}` },
-    el('div', { className: 'etiquette' }, el('span', { text: label }), el('span', { text: `${value} / ${max}` })),
-    el('div', { className: 'barre-fond' }, el('div', { className: 'remplissage', style: `width:${percent}%` })),
-  );
+// Ne redessine un onglet que si son contenu a changé (garde la position de lecture).
+function renderPanel(id, key, build) {
+  if (state.panelCache[id] === key) return;
+  state.panelCache[id] = key;
+  fill($(`#${id}`), build());
 }
 
-function hpGauge(c) {
-  return gauge('pv', '❤️ Points de vie', c.hp, c.maxHp, c.hp / c.maxHp < 0.3);
-}
-
-function xpGauge(c) {
-  const floor = xpForLevel(c.level);
-  const next = xpForLevel(c.level + 1);
-  return gauge('xp', `⭐ Niveau ${c.level} — ${c.xp} XP`, c.xp - floor, next - floor);
-}
-
-function statsGrid(c, mini = false) {
-  return el(
-    'div',
-    { className: `caracs ${mini ? 'mini' : ''}` },
-    state.rules.stats.map((s) =>
-      el(
-        'div',
-        { className: 'carac', title: state.rules.statLabels[s] },
-        el('div', { className: 'nom', text: s }),
-        el('div', { className: 'valeur', text: c.stats[s] }),
-        el('div', { className: 'mod', text: formatMod(modifier(c.stats[s])) }),
-      ),
-    ),
-  );
-}
-
-function conditions(c) {
-  return c.conditions.length
-    ? el(
-        'div',
-        { className: 'etiquettes' },
-        c.conditions.map((s) => el('span', { className: 'etat', text: s })),
-      )
-    : null;
-}
-
-function renderSheet(c) {
-  fill(
-    $('#onglet-fiche'),
-    el(
-      'div',
-      { className: 'entete-perso' },
-      el('div', { className: 'portrait', text: c.emoji }),
-      el(
-        'div',
-        {},
-        el('div', { className: 'nom', text: c.name }),
-        el('div', { className: 'sous', text: `${characterSummary(c)} · niveau ${c.level}` }),
-      ),
-    ),
-    hpGauge(c),
-    xpGauge(c),
-    el('div', { className: 'or-ligne', text: `🪙 ${c.gold} pièces d'or` }),
-    conditions(c),
-    statsGrid(c),
-    el('h3', { text: 'Capacités' }),
-    el(
-      'ul',
-      {},
-      c.abilities.map((a) => el('li', { text: a })),
-    ),
-    c.background ? el('h3', { text: 'Histoire' }) : null,
-    c.background ? el('p', { className: 'histoire', text: c.background }) : null,
+function renderSheetTab(me) {
+  renderPanel('onglet-fiche', JSON.stringify(me.character), () =>
+    characterSheet(me.character, state.rules, {
+      actions: [
+        el('button', {
+          type: 'button',
+          className: 'petit-bouton',
+          text: '✏️ Apparence et personnalité',
+          onclick: () => {
+            state.editing = 'style';
+            render();
+          },
+        }),
+      ],
+    }),
   );
 }
 
 function renderInventory(c) {
   const mine = isMyTurn();
-  fill(
-    $('#onglet-inventaire'),
+  renderPanel('onglet-inventaire', JSON.stringify([c.inventory, c.gold, mine]), () => [
     el('div', { className: 'or-ligne', text: `🪙 ${c.gold} pièces d'or` }),
     c.inventory.length ? null : el('p', { className: 'petit', text: 'Ton sac est vide.' }),
-    ...c.inventory.map((item) =>
-      el(
-        'div',
-        { className: 'objet' },
+    el(
+      'ul',
+      { className: 'liste-objets' },
+      c.inventory.map((item) =>
         el(
-          'div',
-          {},
-          el('div', {}, item.name, item.quantity > 1 ? el('span', { className: 'quantite', text: ` ×${item.quantity}` }) : null),
-          item.description ? el('div', { className: 'description', text: item.description }) : null,
+          'li',
+          { className: 'objet' },
+          el(
+            'div',
+            {},
+            el('div', { className: 'objet-nom' }, item.name, item.quantity > 1 ? el('span', { className: 'quantite', text: ` ×${item.quantity}` }) : null),
+            item.description ? el('div', { className: 'description', text: item.description }) : null,
+          ),
+          el('button', {
+            type: 'button',
+            className: 'petit-bouton',
+            text: 'Utiliser',
+            'aria-label': `Utiliser ${item.name}`,
+            title: mine ? '' : 'Tu peux préparer ton action, elle partira à ton tour',
+            onclick: () => {
+              const input = $('#action-texte');
+              input.value = `J'utilise ${item.name} pour `;
+              setView('recit');
+              input.focus();
+            },
+          }),
         ),
-        el('button', {
-          className: 'petit-bouton',
-          text: 'Utiliser',
-          disabled: !mine,
-          title: mine ? '' : 'Attends ton tour',
-          onclick: () => {
-            const input = $('#action-texte');
-            input.value = `J'utilise ${item.name} pour `;
-            input.focus();
-          },
-        }),
       ),
     ),
-  );
+  ]);
 }
 
 function renderGroup() {
   const g = state.game;
-  $('#onglet-groupe').replaceChildren(
-    ...g.players
-      .filter((p) => p.character)
-      .map((p) => {
+  const members = g.players.filter((p) => p.character);
+  renderPanel('onglet-groupe', JSON.stringify([members, g.turn.playerId]), () =>
+    el(
+      'ul',
+      { className: 'liste-groupe' },
+      members.map((p) => {
         const c = p.character;
-        const details = el(
-          'details',
-          {
-            className: `carte-membre ${g.turn.playerId === p.id ? 'actif' : ''}`,
-            open: state.openMembers.has(p.id),
-            ontoggle: (e) => (e.target.open ? state.openMembers.add(p.id) : state.openMembers.delete(p.id)),
-          },
-          el(
-            'summary',
-            {},
-            el(
-              'div',
-              { className: 'tete' },
-              el('span', { className: `point ${p.connected ? 'en-ligne' : ''}` }),
-              el('strong', { text: `${c.emoji} ${c.name}` }),
-              el('span', { className: 'petit', text: `${p.name} · niv. ${c.level}` }),
-            ),
-            hpGauge(c),
-            conditions(c),
-          ),
+        return el(
+          'li',
+          { className: `carte-membre ${g.turn.playerId === p.id ? 'actif' : ''}` },
           el(
             'div',
-            { className: 'details' },
-            el('div', { text: `${characterSummary(c)} · 🪙 ${c.gold} · ${c.xp} XP` }),
-            statsGrid(c, true),
-            el('div', {
-              text: `Sac : ${c.inventory.map((i) => (i.quantity > 1 ? `${i.name} ×${i.quantity}` : i.name)).join(', ') || 'vide'}`,
-            }),
+            { className: 'tete' },
+            smallPortrait(c, 48),
+            el(
+              'div',
+              { className: 'membre-texte' },
+              el('strong', { text: c.name }),
+              el('div', { className: 'petit' }, el('span', { className: `point ${p.connected ? 'en-ligne' : ''}`, role: 'img', 'aria-label': p.connected ? 'connecté' : 'déconnecté' }), ` ${p.name} · niv. ${c.level} · ${characterSummary(c, state.rules)}`),
+            ),
           ),
+          hpGauge(c),
+          conditions(c),
+          el('button', { type: 'button', className: 'petit-bouton', text: 'Voir la fiche complète', 'aria-label': `Voir la fiche de ${c.name}`, onclick: () => showSheet(p) }),
         );
-        return details;
       }),
+    ),
   );
 }
 
 function renderJournal() {
   const g = state.game;
-  fill(
-    $('#onglet-journal'),
+  renderPanel('onglet-journal', JSON.stringify([g.scene.place, g.journal]), () => [
     el('h3', { text: '📍 Lieu actuel' }),
     el('p', { text: g.scene.place || '—' }),
     el('h3', { text: '📜 Notes du groupe' }),
-    g.journal.length
-      ? null
-      : el('p', { className: 'petit', text: 'Les quêtes, indices et personnages importants apparaîtront ici.' }),
-    ...[...g.journal].reverse().map((note) => el('div', { className: 'note-journal', text: note })),
-  );
+    g.journal.length ? null : el('p', { className: 'petit', text: 'Les quêtes, indices et personnages importants apparaîtront ici.' }),
+    el(
+      'ul',
+      { className: 'liste-journal' },
+      [...g.journal].reverse().map((note) => el('li', { className: 'note-journal', text: note })),
+    ),
+  ]);
 }
 
 function renderChat() {
   const messages = state.game.log.filter((e) => e.type === 'chat');
   if (messages.length === state.chatCount) return;
-  if (state.chatCount >= 0 && state.tab !== 'chat') {
+  const chatVisible = state.tab === 'chat' && (state.view === 'chat' || !isMobile());
+  if (state.chatCount >= 0 && !chatVisible) {
     state.unreadChat += messages.slice(state.chatCount).filter((m) => m.playerId !== state.playerId).length;
   }
   state.chatCount = messages.length;
   const box = $('#chat-messages');
-  box.replaceChildren(
-    ...messages.map((m) => {
+  fill(
+    box,
+    messages.map((m) => {
       const author = playerById(m.playerId);
       return el(
         'div',
@@ -858,9 +750,11 @@ function renderChat() {
 }
 
 function updateChatBadge() {
-  const badge = $('#badge-chat');
-  badge.textContent = state.unreadChat;
-  badge.classList.toggle('cache', state.unreadChat === 0);
+  for (const badge of $$('.badge-chat')) {
+    badge.textContent = state.unreadChat;
+    badge.setAttribute('aria-label', `${state.unreadChat} message${state.unreadChat > 1 ? 's' : ''} non lu${state.unreadChat > 1 ? 's' : ''}`);
+    badge.classList.toggle('cache', state.unreadChat === 0);
+  }
 }
 
 function renderGame() {
@@ -872,17 +766,19 @@ function renderGame() {
   renderLog();
   renderLiveNarration();
   renderTurn();
-  renderSheet(me.character);
+  renderSheetTab(me);
   renderInventory(me.character);
   renderGroup();
   renderJournal();
   renderChat();
+  renderTabs();
 }
 
 async function sendAction() {
   const input = $('#action-texte');
   const text = input.value.trim();
-  if (!text || !isMyTurn()) return;
+  if (!text) return toast('Écris d’abord ce que fait ton personnage.', 'info');
+  if (!isMyTurn()) return toast('Ce n’est pas encore ton tour : ton texte est gardé pour plus tard.', 'info');
   $('#btn-agir').disabled = true;
   const res = await emit('tour:action', { text });
   if (!res.ok) {
@@ -892,7 +788,10 @@ async function sendAction() {
   input.value = '';
 }
 
-$('#btn-agir').addEventListener('click', sendAction);
+$('#form-action').addEventListener('submit', (e) => {
+  e.preventDefault();
+  sendAction();
+});
 $('#action-texte').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -904,18 +803,76 @@ $('#btn-passer').addEventListener('click', async () => {
   if (!res.ok) toast(res.error);
 });
 
-for (const button of document.querySelectorAll('.onglets button')) {
+// ---------- Onglets (ordinateur) et navigation du bas (téléphone) ----------
+
+const TABS = ['fiche', 'inventaire', 'groupe', 'journal', 'chat'];
+const isMobile = () => window.matchMedia('(max-width: 860px)').matches;
+
+function renderTabs() {
+  for (const button of $$('.onglets [role="tab"]')) {
+    const active = button.dataset.onglet === state.tab;
+    button.setAttribute('aria-selected', String(active));
+    button.tabIndex = active ? 0 : -1;
+  }
+  for (const panel of $$('.onglet')) panel.classList.toggle('cache', panel.id !== `onglet-${state.tab}`);
+  $('#jeu').dataset.vue = state.view;
+  for (const button of $$('.nav-mobile button')) {
+    const active = button.dataset.mobile === state.view;
+    button.classList.toggle('actif', active);
+    button.setAttribute('aria-current', active ? 'page' : 'false');
+  }
+}
+
+function selectTab(tab, { focus = false } = {}) {
+  state.tab = tab;
+  if (tab === 'chat') {
+    state.unreadChat = 0;
+    updateChatBadge();
+  }
+  renderTabs();
+  if (focus) $(`#tab-${tab}`).focus();
+}
+
+function setView(view) {
+  state.view = view;
+  if (view !== 'recit') selectTab(view);
+  else renderTabs();
+  window.scrollTo({ top: 0 });
+}
+
+for (const button of $$('.onglets [role="tab"]')) {
   button.addEventListener('click', () => {
-    state.tab = button.dataset.onglet;
-    for (const b of document.querySelectorAll('.onglets button')) b.classList.toggle('actif', b === button);
-    for (const panel of document.querySelectorAll('.onglet')) panel.classList.toggle('cache', panel.id !== `onglet-${state.tab}`);
-    if (state.tab === 'chat') {
-      state.unreadChat = 0;
-      updateChatBadge();
-      $('#chat-texte').focus();
-    }
+    selectTab(button.dataset.onglet);
+    state.view = button.dataset.onglet;
+    if (button.dataset.onglet === 'chat') $('#chat-texte').focus();
+  });
+  button.addEventListener('keydown', (e) => {
+    const i = TABS.indexOf(state.tab);
+    if (e.key === 'ArrowRight') selectTab(TABS[(i + 1) % TABS.length], { focus: true });
+    else if (e.key === 'ArrowLeft') selectTab(TABS[(i + TABS.length - 1) % TABS.length], { focus: true });
+    else if (e.key === 'Home') selectTab(TABS[0], { focus: true });
+    else if (e.key === 'End') selectTab(TABS.at(-1), { focus: true });
+    else return;
+    e.preventDefault();
   });
 }
+for (const button of $$('.nav-mobile button')) {
+  button.addEventListener('click', () => setView(button.dataset.mobile));
+}
+
+// Raccourcis : Alt+0 pour agir, Alt+1 à 5 pour les onglets.
+document.addEventListener('keydown', (e) => {
+  if (!e.altKey || e.ctrlKey || e.metaKey || document.body.dataset.ecran !== 'jeu') return;
+  if (e.key === '0') {
+    setView('recit');
+    $('#action-texte').focus();
+  } else if (/^[1-5]$/.test(e.key)) {
+    const tab = TABS[Number(e.key) - 1];
+    setView(tab);
+    selectTab(tab, { focus: true });
+  } else return;
+  e.preventDefault();
+});
 
 $('#chat-form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -930,6 +887,7 @@ $('#chat-form').addEventListener('submit', async (e) => {
 // ---------- Démarrage ----------
 
 async function init() {
+  initSettings();
   const [rules, info] = await Promise.all([fetch('/api/regles').then((r) => r.json()), fetch('/api/info').then((r) => r.json())]);
   state.rules = rules;
   state.info = info;

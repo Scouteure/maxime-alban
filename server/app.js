@@ -5,7 +5,24 @@ import { networkInterfaces } from 'node:os';
 import express from 'express';
 import { Server } from 'socket.io';
 import { GameStore } from './store.js';
-import { CLASSES, RACES, STANDARD_ARRAY, STATS, STAT_LABELS, rollDie, rollStats, rollTotals, standardStats } from './rules.js';
+import { AGES, ALIGNMENTS, INSPIRATIONS, LOOK, NAMES, PRONOUNS, TRAITS } from './personnalisation.js';
+import {
+  CLASSES,
+  ORIGINS,
+  POINT_BUY,
+  RACES,
+  SKILLS,
+  STANDARD_ARRAY,
+  STATS,
+  STAT_DESCRIPTIONS,
+  STAT_LABELS,
+  defaultLook,
+  proficiencyBonus,
+  rollDie,
+  rollPool,
+  rollTotals,
+  skillTotals,
+} from './rules.js';
 
 const MAX_PLAYERS = 6;
 
@@ -30,8 +47,32 @@ export function createGameServer({ narrator, dataDir, publicDir }) {
   app.get('/api/info', (req, res) =>
     res.json({ narrator: narrator.label, lan: lanAddresses().map((ip) => `http://${ip}:${req.socket.localPort}`) }),
   );
+  // Tout ce dont l'interface a besoin pour la création de personnage.
+  const defaultLooks = {};
+  for (const race of Object.keys(RACES)) {
+    defaultLooks[race] = {};
+    for (const cls of Object.keys(CLASSES)) defaultLooks[race][cls] = defaultLook(race, cls);
+  }
   app.get('/api/regles', (_req, res) =>
-    res.json({ stats: STATS, statLabels: STAT_LABELS, races: RACES, classes: CLASSES, standardArray: STANDARD_ARRAY }),
+    res.json({
+      stats: STATS,
+      statLabels: STAT_LABELS,
+      statDescriptions: STAT_DESCRIPTIONS,
+      skills: SKILLS,
+      races: RACES,
+      classes: CLASSES,
+      origins: ORIGINS,
+      standardArray: STANDARD_ARRAY,
+      pointBuy: POINT_BUY,
+      look: LOOK,
+      defaultLooks,
+      pronouns: PRONOUNS,
+      ages: AGES,
+      alignments: ALIGNMENTS,
+      traits: TRAITS,
+      inspirations: INSPIRATIONS,
+      names: NAMES,
+    }),
   );
 
   const httpServer = createServer(app);
@@ -48,12 +89,15 @@ export function createGameServer({ narrator, dataDir, publicDir }) {
 
   // Applique la réponse du narrateur à la partie.
   function applyNarration(game, request, result) {
-    if (request.kind === 'action' && result.jet?.utilise && STATS.includes(result.jet.caracteristique)) {
-      const stat = result.jet.caracteristique;
-      const total = request.totals[stat];
+    const skill = SKILLS[result.jet?.competence] ? result.jet.competence : null;
+    const stat = skill ? SKILLS[skill].stat : result.jet?.caracteristique;
+    if (request.kind === 'action' && result.jet?.utilise && STATS.includes(stat)) {
+      // Une compétence maîtrisée ajoute le bonus de maîtrise au jet.
+      const proficient = Boolean(skill && request.skillTotals?.[skill] !== undefined);
+      const total = proficient ? request.skillTotals[skill] : request.totals[stat];
       const dc = Math.min(40, Math.max(1, Math.round(result.jet.difficulte) || 10));
       const success = request.d20 === 20 || (request.d20 !== 1 && total >= dc);
-      game.addLog({ type: 'roll', playerId: request.actor.id, stat, d20: request.d20, total, dc, success });
+      game.addLog({ type: 'roll', playerId: request.actor.id, stat, skill, proficient, d20: request.d20, total, dc, success });
     }
 
     game.addLog({ type: 'narration', text: clean(result.narration, 6000) });
@@ -197,8 +241,11 @@ export function createGameServer({ narrator, dataDir, publicDir }) {
       reply({ ok: true });
     });
 
-    on('personnage:caracs', ({ classKey, mode }, reply) => {
-      reply({ ok: true, stats: mode === 'des' ? rollStats(classKey) : standardStats(classKey) });
+    // Lance 4d6 six fois. Le serveur garde le tirage pour vérifier la fiche envoyée ensuite.
+    on('personnage:des', (_payload, reply) => {
+      player.rolledPool = rollPool();
+      changed(game);
+      reply({ ok: true, pool: player.rolledPool });
     });
 
     on('personnage:creer', (choices, reply) => {
@@ -209,9 +256,23 @@ export function createGameServer({ narrator, dataDir, publicDir }) {
         name: choices.name,
         race: choices.race,
         classKey: choices.classKey,
-        background: choices.background,
+        origin: choices.origin,
+        skills: choices.skills,
+        statMethod: choices.statMethod,
         baseStats: choices.baseStats,
+        pronouns: choices.pronouns,
+        age: choices.age,
+        alignment: choices.alignment,
+        personality: choices.personality,
+        look: choices.look,
+        background: choices.background,
       });
+      changed(game);
+      reply({ ok: true });
+    });
+
+    on('personnage:style', (choices, reply) => {
+      game.restyleCharacter(player.id, choices);
       changed(game);
       reply({ ok: true });
     });
@@ -260,6 +321,8 @@ export function createGameServer({ narrator, dataDir, publicDir }) {
         text: action,
         d20,
         totals: rollTotals(p.character, d20),
+        skillTotals: skillTotals(p.character, d20),
+        proficiency: proficiencyBonus(p.character.level),
         next: g.nextPlayerAfter(p.id),
         actionLogId: entry.id,
       };

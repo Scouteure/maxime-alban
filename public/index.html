@@ -1,8 +1,9 @@
 <!doctype html>
-<html lang="fr">
+<html lang="fr" data-theme="auto" data-taille="normal">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
     <title>La Taverne du Dragon</title>
     <link
       rel="icon"
@@ -11,181 +12,318 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Crimson+Pro:ital,wght@0,400;0,600;1,400&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Cinzel:wght@600;700&family=Crimson+Pro:ital,wght@0,400;0,600;1,400&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
+    <a class="lien-evitement" href="#contenu">Aller au contenu</a>
     <div id="toast" role="status" aria-live="polite"></div>
 
-    <!-- Accueil -->
-    <section id="ecran-accueil" class="ecran">
-      <div class="carte accueil">
-        <div class="blason">🐉</div>
-        <h1>La Taverne du Dragon</h1>
-        <p class="sous-titre">Une aventure de jeu de rôle au tour par tour, contée par un Maître du Jeu IA.</p>
+    <!-- Boutons Aide et Réglages, visibles hors de la partie -->
+    <div id="outils-globaux" class="outils-flottants">
+      <button type="button" class="btn-aide icone" aria-label="Aide" title="Aide">❓</button>
+      <button type="button" class="btn-reglages icone" aria-label="Réglages d’affichage" title="Réglages d’affichage">⚙️</button>
+    </div>
 
-        <label
-          >Ton prénom
-          <input id="nom-joueur" maxlength="30" autocomplete="nickname" placeholder="ex. Maxime" />
-        </label>
-        <button id="btn-creer" class="principal">Créer une partie</button>
+    <div id="contenu">
+      <!-- Accueil -->
+      <section id="ecran-accueil" class="ecran" aria-labelledby="titre-accueil">
+        <div class="accueil">
+          <div class="blason" aria-hidden="true">🐉</div>
+          <h1 id="titre-accueil">La Taverne du Dragon</h1>
+          <p class="sous-titre">Une aventure de jeu de rôle entre amis, au tour par tour, contée par un Maître du Jeu IA.</p>
 
-        <div class="separateur"><span>ou rejoindre un ami</span></div>
+          <div class="carte accueil-carte">
+            <label class="champ" for="nom-joueur">Ton prénom</label>
+            <input id="nom-joueur" maxlength="30" autocomplete="nickname" placeholder="ex. Maxime" />
 
-        <div class="ligne">
-          <input id="code-partie" maxlength="4" placeholder="CODE" aria-label="Code de la partie" />
-          <button id="btn-rejoindre">Rejoindre</button>
-        </div>
-        <button id="btn-reprendre" class="lien cache"></button>
-        <p id="info-narrateur" class="petit"></p>
-      </div>
-    </section>
+            <button id="btn-reprendre" type="button" class="reprendre cache"></button>
 
-    <!-- Création du personnage -->
-    <section id="ecran-personnage" class="ecran cache">
-      <div class="carte large">
-        <h2>Création du personnage</h2>
-        <label
-          >Nom du personnage
-          <input id="perso-nom" maxlength="40" placeholder="ex. Borin Barbe-de-Fer" />
-        </label>
-
-        <h3>Race</h3>
-        <div id="choix-race" class="grille-choix"></div>
-
-        <h3>Classe</h3>
-        <div id="choix-classe" class="grille-choix"></div>
-        <div id="classe-details" class="details-classe"></div>
-
-        <h3>Caractéristiques</h3>
-        <div id="caracs" class="caracs"></div>
-        <div class="ligne">
-          <button id="btn-des">🎲 Lancer les dés (4d6)</button>
-          <button id="btn-standard">Répartition standard</button>
-        </div>
-
-        <label
-          >Histoire et personnalité <span class="petit">(facultatif, le MJ s'en servira)</span>
-          <textarea
-            id="perso-histoire"
-            maxlength="600"
-            rows="3"
-            placeholder="ex. Ancien forgeron en quête de vengeance, adore les énigmes et déteste les araignées."
-          ></textarea>
-        </label>
-
-        <div class="ligne fin">
-          <button id="btn-annuler-perso" class="lien cache">Annuler</button>
-          <button id="btn-valider-perso" class="principal">Valider le personnage</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- Salon d'attente -->
-    <section id="ecran-salon" class="ecran cache">
-      <div class="carte large">
-        <h2>Le salon de la taverne</h2>
-        <div class="partage">
-          <div>Code de la partie : <strong id="salon-code" class="code"></strong></div>
-          <button id="btn-copier-lien">🔗 Copier le lien d'invitation</button>
-        </div>
-        <p id="astuce-lien" class="petit astuce cache"></p>
-
-        <h3>Aventuriers présents</h3>
-        <ul id="salon-joueurs" class="liste-joueurs"></ul>
-        <div class="ligne">
-          <button id="btn-modifier-perso" class="lien">✏️ Modifier mon personnage</button>
-          <button class="lien btn-quitter">Quitter la partie</button>
-        </div>
-
-        <h3>Réglages de l'aventure</h3>
-        <label
-          >Univers
-          <textarea id="param-univers" maxlength="500" rows="2"></textarea>
-        </label>
-        <label
-          >Ton
-          <input id="param-ton" maxlength="200" />
-        </label>
-        <label
-          >Situation de départ
-          <input id="param-depart" maxlength="300" />
-        </label>
-        <div class="ligne fin">
-          <button id="btn-enregistrer-params">Enregistrer les réglages</button>
-          <button id="btn-commencer" class="principal">⚔️ Commencer l'aventure</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- Partie en cours -->
-    <section id="ecran-jeu" class="ecran cache">
-      <header class="barre">
-        <span class="logo">🐉 La Taverne du Dragon</span>
-        <span class="barre-infos">
-          <span id="tour-numero"></span>
-          <button id="btn-inviter" class="petit-bouton">🔗 Inviter (<span id="jeu-code"></span>)</button>
-          <button class="petit-bouton btn-quitter" title="Quitter la partie">🚪</button>
-        </span>
-      </header>
-
-      <main class="jeu">
-        <div class="colonne-recit">
-          <div class="scene">
-            <img id="scene-image" alt="" />
-            <div id="scene-chargement" class="scene-chargement cache">🖌️ L'illustrateur dessine…</div>
-            <div class="scene-infos">
-              <div id="scene-lieu" class="scene-lieu"></div>
-              <div id="scene-ambiance" class="scene-ambiance"></div>
-            </div>
-            <div id="scene-ennemis" class="scene-ennemis"></div>
-          </div>
-
-          <div id="recit" class="recit" aria-live="polite"></div>
-
-          <div class="zone-action">
-            <div id="bandeau-tour" class="bandeau-tour"></div>
-            <div id="suggestions" class="suggestions"></div>
-            <div class="saisie">
-              <textarea
-                id="action-texte"
-                rows="2"
-                maxlength="500"
-                placeholder="Que fait ton personnage ? (Entrée pour valider, Maj+Entrée pour aller à la ligne)"
-              ></textarea>
-              <div class="boutons-action">
-                <button id="btn-agir" class="principal">Agir</button>
-                <button id="btn-passer" class="petit-bouton">Passer</button>
+            <div class="accueil-choix">
+              <div class="tuile">
+                <h2><span aria-hidden="true">✨</span> Nouvelle partie</h2>
+                <p class="petit">Ouvre une table et invite tes amis avec un lien.</p>
+                <button id="btn-creer" type="button" class="principal large">Créer une partie</button>
+              </div>
+              <div class="tuile">
+                <h2><span aria-hidden="true">🚪</span> Rejoindre</h2>
+                <p class="petit">Entre le code à 4 lettres que ton ami t’a envoyé.</p>
+                <form id="form-rejoindre" class="ligne">
+                  <input id="code-partie" maxlength="4" placeholder="CODE" aria-label="Code de la partie" autocomplete="off" />
+                  <button type="submit">Rejoindre</button>
+                </form>
               </div>
             </div>
+            <p id="info-narrateur" class="petit centre"></p>
+          </div>
+          <button type="button" class="lien btn-aide">📖 Comment jouer ?</button>
+        </div>
+      </section>
+
+      <!-- Création du personnage -->
+      <section id="ecran-personnage" class="ecran cache" aria-labelledby="titre-creation">
+        <div class="createur">
+          <header class="createur-entete">
+            <h1 id="titre-creation">Création du personnage</h1>
+            <div class="ligne">
+              <button id="btn-tout-hasard" type="button">🎲 Tout au hasard</button>
+              <button id="btn-annuler-perso" type="button" class="secondaire cache">Annuler</button>
+            </div>
+          </header>
+          <nav class="etapes" aria-label="Étapes de création">
+            <ol id="liste-etapes"></ol>
+          </nav>
+          <div class="createur-corps">
+            <div id="etape-contenu" class="etape" tabindex="-1"></div>
+            <aside id="apercu" class="apercu" aria-label="Aperçu du personnage"></aside>
+          </div>
+          <footer class="createur-pied">
+            <button id="btn-etape-prec" type="button">← Précédent</button>
+            <span id="etape-position" class="petit"></span>
+            <button id="btn-etape-suiv" type="button" class="principal">Suivant →</button>
+          </footer>
+        </div>
+      </section>
+
+      <!-- Salon d'attente -->
+      <section id="ecran-salon" class="ecran cache" aria-labelledby="titre-salon">
+        <div class="salon">
+          <header class="salon-entete">
+            <div>
+              <h1 id="titre-salon">Le salon de la taverne</h1>
+              <p class="petit">Préparez l’aventure ensemble, puis lancez-la quand tout le monde est prêt.</p>
+            </div>
+            <div class="partage">
+              <span>Code : <strong id="salon-code" class="code"></strong></span>
+              <button id="btn-copier-lien" type="button">🔗 Copier le lien d’invitation</button>
+            </div>
+          </header>
+          <p id="astuce-lien" class="astuce cache"></p>
+
+          <div class="salon-grille">
+            <section class="carte" aria-labelledby="titre-aventuriers">
+              <h2 id="titre-aventuriers">Aventuriers</h2>
+              <ul id="salon-joueurs" class="liste-joueurs"></ul>
+              <div class="ligne">
+                <button id="btn-modifier-perso" type="button">✏️ Modifier mon personnage</button>
+                <button type="button" class="secondaire btn-quitter">Quitter la partie</button>
+              </div>
+            </section>
+
+            <section class="carte" aria-labelledby="titre-aventure">
+              <h2 id="titre-aventure">L’aventure</h2>
+              <p class="petit">Choisis une idée toute prête ou écris la tienne. Les réglages sont partagés avec tout le groupe.</p>
+              <fieldset class="bloc">
+                <legend>Univers</legend>
+                <div id="presets-univers" class="puces"></div>
+                <textarea id="param-univers" maxlength="500" rows="2" aria-label="Univers, en texte libre"></textarea>
+              </fieldset>
+              <fieldset class="bloc">
+                <legend>Ton</legend>
+                <div id="presets-ton" class="puces"></div>
+                <input id="param-ton" maxlength="200" aria-label="Ton, en texte libre" />
+              </fieldset>
+              <fieldset class="bloc">
+                <legend>Situation de départ</legend>
+                <div id="presets-depart" class="puces"></div>
+                <input id="param-depart" maxlength="300" aria-label="Situation de départ, en texte libre" />
+              </fieldset>
+              <p id="params-statut" class="petit" aria-live="polite"></p>
+            </section>
+          </div>
+
+          <div class="salon-pied">
+            <p id="salon-pret" class="petit"></p>
+            <button id="btn-commencer" type="button" class="principal grand">⚔️ Commencer l’aventure</button>
           </div>
         </div>
+      </section>
 
-        <aside class="colonne-fiche">
-          <nav class="onglets" role="tablist">
-            <button data-onglet="fiche" class="actif">Fiche</button>
-            <button data-onglet="inventaire">Sac</button>
-            <button data-onglet="groupe">Groupe</button>
-            <button data-onglet="journal">Journal</button>
-            <button data-onglet="chat">Chat <span id="badge-chat" class="badge cache"></span></button>
-          </nav>
-          <div id="onglet-fiche" class="onglet"></div>
-          <div id="onglet-inventaire" class="onglet cache"></div>
-          <div id="onglet-groupe" class="onglet cache"></div>
-          <div id="onglet-journal" class="onglet cache"></div>
-          <div id="onglet-chat" class="onglet cache">
-            <p class="petit">Discussion hors-jeu entre joueurs : le narrateur ne la lit pas.</p>
-            <div id="chat-messages" class="chat-messages"></div>
-            <form id="chat-form" class="ligne">
-              <input id="chat-texte" maxlength="300" placeholder="Message…" autocomplete="off" />
-              <button type="submit">Envoyer</button>
-            </form>
+      <!-- Partie en cours -->
+      <section id="ecran-jeu" class="ecran cache" aria-label="Partie en cours">
+        <header class="barre">
+          <span class="logo"><span aria-hidden="true">🐉</span> <span class="logo-texte">La Taverne du Dragon</span></span>
+          <span class="barre-infos">
+            <span id="tour-numero"></span>
+            <button id="btn-inviter" type="button" class="petit-bouton" title="Copier le lien d’invitation">
+              🔗 <span class="masque-mobile">Inviter</span> <span id="jeu-code"></span>
+            </button>
+            <button type="button" class="petit-bouton btn-aide" aria-label="Aide" title="Aide">❓</button>
+            <button type="button" class="petit-bouton btn-reglages" aria-label="Réglages d’affichage" title="Réglages d’affichage">⚙️</button>
+            <button type="button" class="petit-bouton btn-quitter" aria-label="Quitter la partie" title="Quitter la partie">🚪</button>
+          </span>
+        </header>
+
+        <div class="jeu" id="jeu" data-vue="recit">
+          <div class="colonne-recit">
+            <div class="scene">
+              <img id="scene-image" alt="" />
+              <div id="scene-chargement" class="scene-chargement cache">🖌️ L’illustrateur dessine…</div>
+              <div class="scene-infos">
+                <h2 id="scene-lieu" class="scene-lieu"></h2>
+                <div id="scene-ambiance" class="scene-ambiance" aria-hidden="true"></div>
+              </div>
+              <div id="scene-ennemis" class="scene-ennemis" aria-label="Ennemis présents"></div>
+            </div>
+
+            <div id="recit" class="recit" aria-live="polite" aria-label="Récit de l’aventure" tabindex="0"></div>
+
+            <div class="zone-action">
+              <div id="bandeau-tour" class="bandeau-tour" aria-live="polite"></div>
+              <div id="suggestions" class="suggestions" aria-label="Idées d’actions"></div>
+              <form id="form-action" class="saisie">
+                <label for="action-texte" class="sr-only">Ton action</label>
+                <textarea
+                  id="action-texte"
+                  rows="2"
+                  maxlength="500"
+                  placeholder="Que fait ton personnage ? (Entrée pour valider, Maj+Entrée pour aller à la ligne)"
+                ></textarea>
+                <div class="boutons-action">
+                  <button id="btn-agir" type="submit" class="principal">Agir</button>
+                  <button id="btn-passer" type="button" class="petit-bouton">Passer</button>
+                </div>
+              </form>
+            </div>
           </div>
-        </aside>
-      </main>
-    </section>
+
+          <aside class="colonne-fiche" aria-label="Panneau du personnage">
+            <div class="onglets" role="tablist" aria-label="Panneau du personnage">
+              <button type="button" role="tab" id="tab-fiche" aria-controls="onglet-fiche" data-onglet="fiche">
+                <span aria-hidden="true">🧾</span> Fiche
+              </button>
+              <button type="button" role="tab" id="tab-inventaire" aria-controls="onglet-inventaire" data-onglet="inventaire">
+                <span aria-hidden="true">🎒</span> Sac
+              </button>
+              <button type="button" role="tab" id="tab-groupe" aria-controls="onglet-groupe" data-onglet="groupe">
+                <span aria-hidden="true">👥</span> Groupe
+              </button>
+              <button type="button" role="tab" id="tab-journal" aria-controls="onglet-journal" data-onglet="journal">
+                <span aria-hidden="true">🗺️</span> Journal
+              </button>
+              <button type="button" role="tab" id="tab-chat" aria-controls="onglet-chat" data-onglet="chat">
+                <span aria-hidden="true">💬</span> Chat <span class="badge badge-chat cache"></span>
+              </button>
+            </div>
+            <div id="onglet-fiche" class="onglet" role="tabpanel" aria-labelledby="tab-fiche" tabindex="0"></div>
+            <div id="onglet-inventaire" class="onglet cache" role="tabpanel" aria-labelledby="tab-inventaire" tabindex="0"></div>
+            <div id="onglet-groupe" class="onglet cache" role="tabpanel" aria-labelledby="tab-groupe" tabindex="0"></div>
+            <div id="onglet-journal" class="onglet cache" role="tabpanel" aria-labelledby="tab-journal" tabindex="0"></div>
+            <div id="onglet-chat" class="onglet cache" role="tabpanel" aria-labelledby="tab-chat">
+              <p class="petit">Discussion hors-jeu entre joueurs : le narrateur ne la lit pas.</p>
+              <div id="chat-messages" class="chat-messages" aria-live="polite"></div>
+              <form id="chat-form" class="ligne">
+                <input id="chat-texte" maxlength="300" placeholder="Message…" autocomplete="off" aria-label="Message aux autres joueurs" />
+                <button type="submit">Envoyer</button>
+              </form>
+            </div>
+          </aside>
+        </div>
+
+        <!-- Navigation du bas sur téléphone -->
+        <nav class="nav-mobile" aria-label="Sections de la partie">
+          <button type="button" data-mobile="recit"><span aria-hidden="true">📖</span>Récit</button>
+          <button type="button" data-mobile="fiche"><span aria-hidden="true">🧾</span>Fiche</button>
+          <button type="button" data-mobile="inventaire"><span aria-hidden="true">🎒</span>Sac</button>
+          <button type="button" data-mobile="groupe"><span aria-hidden="true">👥</span>Groupe</button>
+          <button type="button" data-mobile="journal"><span aria-hidden="true">🗺️</span>Journal</button>
+          <button type="button" data-mobile="chat"><span aria-hidden="true">💬</span>Chat<span class="badge badge-chat cache"></span></button>
+        </nav>
+      </section>
+    </div>
+
+    <!-- Réglages d'affichage -->
+    <dialog id="dlg-reglages" aria-labelledby="titre-reglages">
+      <form id="form-reglages" method="dialog" class="dialogue">
+        <header class="dialogue-entete">
+          <h2 id="titre-reglages">⚙️ Réglages d’affichage</h2>
+          <button type="button" class="icone" data-fermer aria-label="Fermer">✕</button>
+        </header>
+        <p class="petit">Ces réglages ne concernent que cet appareil.</p>
+        <fieldset class="bloc">
+          <legend>Thème</legend>
+          <div class="puces">
+            <label class="puce-choix"><input type="radio" name="theme" value="auto" class="sr-only" />Automatique</label>
+            <label class="puce-choix"><input type="radio" name="theme" value="sombre" class="sr-only" />🌙 Taverne (sombre)</label>
+            <label class="puce-choix"><input type="radio" name="theme" value="parchemin" class="sr-only" />📜 Parchemin (clair)</label>
+          </div>
+        </fieldset>
+        <fieldset class="bloc">
+          <legend>Taille du texte</legend>
+          <div class="puces">
+            <label class="puce-choix"><input type="radio" name="textSize" value="normal" class="sr-only" />Normale</label>
+            <label class="puce-choix"><input type="radio" name="textSize" value="grand" class="sr-only" />Grande</label>
+            <label class="puce-choix"><input type="radio" name="textSize" value="tres-grand" class="sr-only" />Très grande</label>
+          </div>
+        </fieldset>
+        <fieldset class="bloc options">
+          <legend>Confort</legend>
+          <label class="interrupteur"><input type="checkbox" name="readableFont" /> Police très lisible (aussi pour le récit)</label>
+          <label class="interrupteur"><input type="checkbox" name="highContrast" /> Contraste renforcé</label>
+          <label class="interrupteur"><input type="checkbox" name="reduceMotion" /> Réduire les animations</label>
+          <label class="interrupteur"><input type="checkbox" name="sound" /> Carillon quand c’est mon tour</label>
+        </fieldset>
+        <div class="ligne fin"><button type="submit" class="principal">Fermer</button></div>
+      </form>
+    </dialog>
+
+    <!-- Aide -->
+    <dialog id="dlg-aide" aria-labelledby="titre-aide">
+      <div class="dialogue">
+        <header class="dialogue-entete">
+          <h2 id="titre-aide">📖 Comment jouer</h2>
+          <button type="button" class="icone" data-fermer aria-label="Fermer">✕</button>
+        </header>
+        <ol class="etapes-aide">
+          <li><strong>Crée ou rejoins une partie</strong> avec ton prénom (ou le code à 4 lettres d’un ami).</li>
+          <li><strong>Crée ton personnage</strong> étape par étape : race, classe, historique, compétences, caractéristiques, apparence et personnalité. Tu peux sauter d’une étape à l’autre, ou tout tirer au hasard.</li>
+          <li><strong>Dans le salon</strong>, choisissez ensemble l’univers, le ton et la situation de départ, puis lancez l’aventure.</li>
+          <li><strong>À ton tour</strong>, écris librement ce que fait ton personnage, ou clique sur une idée. Le narrateur lance les dés si besoin et raconte la suite.</li>
+          <li><strong>À tout moment</strong>, consulte ta fiche, ton sac, le groupe et le journal dans le panneau. Tu peux même changer ton apparence en cours de route.</li>
+        </ol>
+        <h3>Les dés</h3>
+        <p>
+          Le serveur lance un d20 et ajoute le modificateur de la caractéristique utilisée (et ton bonus de maîtrise si tu maîtrises la compétence).
+          Si le total atteint la difficulté (DD), c’est réussi. Un 20 naturel est une réussite critique, un 1 un échec critique.
+        </p>
+        <h3>Raccourcis clavier</h3>
+        <table class="raccourcis">
+          <tbody>
+            <tr><th scope="row"><kbd>Entrée</kbd></th><td>Valider ton action</td></tr>
+            <tr><th scope="row"><kbd>Maj</kbd> + <kbd>Entrée</kbd></th><td>Aller à la ligne</td></tr>
+            <tr><th scope="row"><kbd>Alt</kbd> + <kbd>0</kbd></th><td>Aller à la zone d’action</td></tr>
+            <tr><th scope="row"><kbd>Alt</kbd> + <kbd>1</kbd> à <kbd>5</kbd></th><td>Fiche, Sac, Groupe, Journal, Chat</td></tr>
+            <tr><th scope="row"><kbd>←</kbd> <kbd>→</kbd></th><td>Passer d’un onglet ou d’une étape à l’autre</td></tr>
+            <tr><th scope="row"><kbd>Échap</kbd></th><td>Fermer une fenêtre</td></tr>
+          </tbody>
+        </table>
+        <div class="ligne fin"><button type="button" class="principal" data-fermer>Compris !</button></div>
+      </div>
+    </dialog>
+
+    <!-- Fiche d'un autre joueur -->
+    <dialog id="dlg-fiche" aria-label="Fiche de personnage">
+      <div class="dialogue">
+        <header class="dialogue-entete">
+          <span></span>
+          <button type="button" class="icone" data-fermer aria-label="Fermer">✕</button>
+        </header>
+        <div id="dlg-fiche-contenu"></div>
+      </div>
+    </dialog>
+
+    <!-- Confirmation -->
+    <dialog id="dlg-confirmer" aria-labelledby="confirmer-texte">
+      <form method="dialog" class="dialogue petite">
+        <p id="confirmer-texte"></p>
+        <div class="ligne fin">
+          <button id="confirmer-annuler" value="annuler" class="secondaire">Annuler</button>
+          <button id="confirmer-ok" value="ok" class="principal">Confirmer</button>
+        </div>
+      </form>
+    </dialog>
 
     <script src="/socket.io/socket.io.js"></script>
     <script type="module" src="app.js"></script>

@@ -3,6 +3,8 @@
 // et avoir `additionalProperties: false`. Les bornes numériques ne sont pas supportées :
 // le serveur les applique lui-même (voir Game.applyEffects).
 
+import { SKILLS } from '../rules.js';
+
 const item = (props) => ({
   type: 'object',
   additionalProperties: false,
@@ -16,6 +18,7 @@ export const NARRATION_SCHEMA = item({
   jet: item({
     utilise: { type: 'boolean' },
     caracteristique: { type: 'string', enum: ['aucune', 'FOR', 'DEX', 'CON', 'INT', 'SAG', 'CHA'] },
+    competence: { type: 'string', enum: ['aucune', ...Object.keys(SKILLS)] },
     difficulte: { type: 'integer' },
   }),
   narration: { type: 'string' },
